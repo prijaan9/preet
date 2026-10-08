@@ -1,0 +1,149 @@
+name: Ubuntu_VPS
+
+on:
+  workflow_dispatch:
+
+jobs:
+  vps:
+    runs-on: ubuntu-latest
+
+    steps:
+
+      # ==========================================================
+      # 1. Connect GitHub Actions runner to Tailscale
+      # ==========================================================
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+          version: latest
+          use-cache: true
+
+      # ==========================================================
+      # 2. Enable Tailscale SSH
+      # ==========================================================
+      - name: Enable Tailscale SSH
+        shell: bash
+        run: |
+          set -e
+
+          echo "Enabling Tailscale SSH..."
+
+          sudo tailscale set --ssh
+
+          echo "Tailscale SSH enabled."
+
+      # ==========================================================
+      # 3. Verify Tailscale
+      # ==========================================================
+      - name: Verify Tailscale
+        shell: bash
+        run: |
+          set -e
+
+          echo
+          echo "=================================================="
+          echo "             TAILSCALE STATUS"
+          echo "=================================================="
+
+          echo
+          echo "Hostname:"
+          hostname
+
+          echo
+          echo "Tailscale IPv4:"
+          TS_IP="$(sudo tailscale ip -4)"
+          echo "$TS_IP"
+
+          if [ -z "$TS_IP" ]; then
+            echo "ERROR: Tailscale IPv4 address not available."
+            exit 1
+          fi
+
+          echo
+          echo "Tailscale IPv6:"
+          sudo tailscale ip -6 || true
+
+          echo
+          echo "Tailscale status:"
+          sudo tailscale status
+
+          echo
+          echo "Tailscale SSH:"
+          echo "enabled"
+
+          echo
+          echo "=================================================="
+
+      # ==========================================================
+      # 4. Verify the local runner account exists
+      # ==========================================================
+      - name: Verify runner user
+        shell: bash
+        run: |
+          set -e
+
+          echo "Current user:"
+          whoami
+
+          echo
+          echo "Runner account:"
+          id runner
+
+          echo
+          echo "Runner home:"
+          getent passwd runner | cut -d: -f6
+
+      # ==========================================================
+      # 5. Print SSH connection information
+      # ==========================================================
+      - name: Show SSH command
+        shell: bash
+        run: |
+          set -e
+
+          TS_IP="$(sudo tailscale ip -4)"
+
+          echo
+          echo "=================================================="
+          echo "             GITHUB RUNNER IS ONLINE"
+          echo "=================================================="
+          echo
+          echo "Tailscale IPv4:"
+          echo "$TS_IP"
+
+          echo
+          echo "SSH command:"
+          echo "ssh runner@$TS_IP"
+
+          echo
+          echo "IMPORTANT:"
+          echo "Tailscale SSH does NOT use the Linux password."
+          echo "Your client must be logged into the same Tailscale tailnet."
+
+          echo
+          echo "Hostname:"
+          hostname
+
+          echo
+          echo "=================================================="
+
+      # ==========================================================
+      # 6. Keep runner alive for 6 hours
+      # ==========================================================
+      - name: Keep alive
+        shell: bash
+        run: |
+          echo
+          echo "=================================================="
+          echo "Runner started:"
+          date
+          echo
+          echo "Keeping runner alive for 21600 seconds (6 hours)"
+          echo "=================================================="
+
+          sleep 21600
+
+          echo
+          echo "Runner finished:"
+          date
