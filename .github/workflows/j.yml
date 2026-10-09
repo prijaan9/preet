@@ -1,17 +1,20 @@
-name: Ubuntu_VPS
+name: yogmaaya_VPS
 
 on:
   workflow_dispatch:
+    inputs:
+      runner_number:
+        description: "Unique runner number (1, 2, 3, ...)"
+        required: true
+        default: "1"
+        type: string
 
 jobs:
   vps:
     runs-on: ubuntu-latest
 
     steps:
-
-      # ==========================================================
-      # 1. Connect GitHub Actions runner to Tailscale
-      # ==========================================================
+      # 1. Connect to Tailscale
       - name: Connect to Tailscale
         uses: tailscale/github-action@v4
         with:
@@ -19,131 +22,74 @@ jobs:
           version: latest
           use-cache: true
 
-      # ==========================================================
-      # 2. Enable Tailscale SSH
-      # ==========================================================
+      # 2. Set a unique hostname
+      - name: Set yogmaaya hostname
+        shell: bash
+        env:
+          RUNNER_NUMBER: ${{ inputs.runner_number }}
+        run: |
+          set -euo pipefail
+
+          if ! [[ "$RUNNER_NUMBER" =~ ^[1-9][0-9]*$ ]]; then
+            echo "ERROR: Runner number must be a positive integer."
+            exit 1
+          fi
+
+          HOSTNAME="yogmaaya_${RUNNER_NUMBER}"
+
+          echo "Setting Linux hostname to $HOSTNAME"
+          sudo hostnamectl set-hostname "$HOSTNAME" || \
+            sudo hostname "$HOSTNAME"
+
+          echo "Setting Tailscale hostname to $HOSTNAME"
+          sudo tailscale set --hostname="$HOSTNAME"
+
+          echo "Linux hostname: $(hostname)"
+          echo "Requested Tailscale hostname: $HOSTNAME"
+
+      # 3. Enable Tailscale SSH
       - name: Enable Tailscale SSH
         shell: bash
         run: |
           set -e
-
-          echo "Enabling Tailscale SSH..."
-
           sudo tailscale set --ssh
-
           echo "Tailscale SSH enabled."
 
-      # ==========================================================
-      # 3. Verify Tailscale
-      # ==========================================================
-      - name: Verify Tailscale
+      # 4. Verify and print connection details
+      - name: Verify VPS
         shell: bash
+        env:
+          RUNNER_NUMBER: ${{ inputs.runner_number }}
         run: |
-          set -e
+          set -euo pipefail
 
-          echo
-          echo "=================================================="
-          echo "             TAILSCALE STATUS"
-          echo "=================================================="
-
-          echo
-          echo "Hostname:"
-          hostname
-
-          echo
-          echo "Tailscale IPv4:"
+          HOSTNAME="yogmaaya_${RUNNER_NUMBER}"
           TS_IP="$(sudo tailscale ip -4)"
-          echo "$TS_IP"
 
           if [ -z "$TS_IP" ]; then
-            echo "ERROR: Tailscale IPv4 address not available."
+            echo "ERROR: Tailscale IP unavailable."
             exit 1
           fi
 
+          echo "Hostname: $HOSTNAME"
+          echo "Linux hostname: $(hostname)"
+          echo "Tailscale IPv4: $TS_IP"
           echo
-          echo "Tailscale IPv6:"
-          sudo tailscale ip -6 || true
-
-          echo
-          echo "Tailscale status:"
           sudo tailscale status
-
           echo
-          echo "Tailscale SSH:"
-          echo "enabled"
-
-          echo
-          echo "=================================================="
-
-      # ==========================================================
-      # 4. Verify the local runner account exists
-      # ==========================================================
-      - name: Verify runner user
-        shell: bash
-        run: |
-          set -e
-
-          echo "Current user:"
-          whoami
-
-          echo
-          echo "Runner account:"
-          id runner
-
-          echo
-          echo "Runner home:"
-          getent passwd runner | cut -d: -f6
-
-      # ==========================================================
-      # 5. Print SSH connection information
-      # ==========================================================
-      - name: Show SSH command
-        shell: bash
-        run: |
-          set -e
-
-          TS_IP="$(sudo tailscale ip -4)"
-
-          echo
-          echo "=================================================="
-          echo "             GITHUB RUNNER IS ONLINE"
-          echo "=================================================="
-          echo
-          echo "Tailscale IPv4:"
-          echo "$TS_IP"
-
-          echo
-          echo "SSH command:"
+          echo "SSH by IP:"
           echo "ssh runner@$TS_IP"
-
           echo
-          echo "IMPORTANT:"
-          echo "Tailscale SSH does NOT use the Linux password."
-          echo "Your client must be logged into the same Tailscale tailnet."
+          echo "SSH by MagicDNS, if configured:"
+          echo "ssh runner@$HOSTNAME"
 
-          echo
-          echo "Hostname:"
-          hostname
-
-          echo
-          echo "=================================================="
-
-      # ==========================================================
-      # 6. Keep runner alive for 6 hours
-      # ==========================================================
+      # 5. Keep runner alive for six hours
       - name: Keep alive
         shell: bash
         run: |
-          echo
-          echo "=================================================="
-          echo "Runner started:"
-          date
-          echo
-          echo "Keeping runner alive for 21600 seconds (6 hours)"
-          echo "=================================================="
+          set -e
 
+          echo "Runner started: $(date)"
+          echo "Keeping runner alive for 6 hours."
           sleep 21600
-
-          echo
-          echo "Runner finished:"
-          date
+          echo "Runner finished: $(date)"
